@@ -87,8 +87,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 if (graph.isEmpty) {
-                    _errorMessage.value = "Не нашли ни одной дороги в радиусе ${radius.toInt()} м. " +
-                        "Проверьте интернет-соединение или попробуйте другую точку старта."
+                    val coords = "%.5f, %.5f".format(origin.lat, origin.lon)
+                    _errorMessage.value = "Не нашли ни одной дороги в радиусе ${radius.toInt()} м от точки " +
+                        "($coords). Проверьте, что это адекватное местоположение (не посреди воды и не " +
+                        "координаты по умолчанию у эмулятора), либо выберите другую точку старта на карте."
                     return@launch
                 }
 
