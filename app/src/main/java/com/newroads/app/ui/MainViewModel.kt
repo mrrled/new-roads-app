@@ -10,6 +10,7 @@ import com.newroads.app.data.db.entity.WalkRecordEntity
 import com.newroads.app.location.TrackingRepository
 import com.newroads.app.location.TrackingState
 import com.newroads.app.location.getLastLocation
+import com.newroads.app.osm.GeoPt
 import com.newroads.app.osm.OverpassClient
 import com.newroads.app.routing.RouteGenerator
 import com.newroads.app.routing.RouteResult
@@ -45,8 +46,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val trackingState: StateFlow<TrackingState> = TrackingRepository.state
 
+    private val _startPoint = MutableStateFlow<GeoPt?>(null)
+    val startPoint: StateFlow<GeoPt?> = _startPoint.asStateFlow()
+
     fun setTargetSteps(steps: Int) {
         _targetSteps.value = steps.coerceIn(1000, 40000)
+    }
+
+    fun setStartPoint(point: GeoPt?) {
+        _startPoint.value = point
     }
 
     fun generateRoute() {
@@ -54,19 +62,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _isLoading.value = true
             _errorMessage.value = null
             try {
-                val location = getLastLocation(getApplication())
-                if (location == null) {
-                    _errorMessage.value = "Не удалось определить местоположение"
-                    return@launch
+                val origin = _startPoint.value ?: run {
+                    val location = getLastLocation(getApplication())
+                    if (location == null) {
+                        _errorMessage.value = "Не удалось определить местоположение"
+                        return@launch
+                    }
+                    GeoPt(location.latitude, location.longitude)
                 }
                 val targetDistance = _targetSteps.value * STRIDE_METERS
                 val radius = targetDistance / 2.0 * 1.4
 
                 val result = withContext(Dispatchers.IO) {
-                    val graph = OverpassClient().fetchGraph(location.latitude, location.longitude, radius)
+                    val graph = OverpassClient().fetchGraph(origin.lat, origin.lon, radius)
                     val visitedKeys = repository.getVisitedKeys()
                     RouteGenerator(graph, visitedKeys, STRIDE_METERS)
-                        .generateLoop(location.latitude, location.longitude, targetDistance)
+                        .generateLoop(origin.lat, origin.lon, targetDistance)
                 }
 
                 if (result == null) {

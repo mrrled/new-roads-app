@@ -16,6 +16,7 @@ import com.newroads.app.ui.HistoryScreen
 import com.newroads.app.ui.HomeScreen
 import com.newroads.app.ui.MainViewModel
 import com.newroads.app.ui.MapScreen
+import com.newroads.app.ui.PickLocationScreen
 import com.newroads.app.ui.theme.NewRoadsTheme
 
 class MainActivity : ComponentActivity() {
@@ -46,7 +47,8 @@ class MainActivity : ComponentActivity() {
                         HomeScreen(
                             viewModel = viewModel,
                             onRouteReady = { navController.navigate("map") },
-                            onOpenHistory = { navController.navigate("history") }
+                            onOpenHistory = { navController.navigate("history") },
+                            onPickLocation = { navController.navigate("pick_location") }
                         )
                     }
                     composable("map") {
@@ -58,6 +60,15 @@ class MainActivity : ComponentActivity() {
                     composable("history") {
                         HistoryScreen(
                             viewModel = viewModel,
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
+                    composable("pick_location") {
+                        PickLocationScreen(
+                            onConfirm = { point ->
+                                viewModel.setStartPoint(point)
+                                navController.popBackStack()
+                            },
                             onBack = { navController.popBackStack() }
                         )
                     }

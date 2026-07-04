@@ -30,12 +30,14 @@ import androidx.compose.ui.unit.dp
 fun HomeScreen(
     viewModel: MainViewModel,
     onRouteReady: () -> Unit,
-    onOpenHistory: () -> Unit
+    onOpenHistory: () -> Unit,
+    onPickLocation: () -> Unit
 ) {
     val targetSteps by viewModel.targetSteps.collectAsState()
     val route by viewModel.route.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.errorMessage.collectAsState()
+    val startPoint by viewModel.startPoint.collectAsState()
     var stepsText by remember(targetSteps) { mutableStateOf(targetSteps.toString()) }
 
     Scaffold(
@@ -58,6 +60,27 @@ fun HomeScreen(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
+
+            Spacer(Modifier.height(16.dp))
+
+            Text(
+                text = startPoint?.let { "Старт: ${formatDecimal(it.lat, 5)}, ${formatDecimal(it.lon, 5)}" }
+                    ?: "Старт: текущее местоположение",
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            Button(onClick = onPickLocation, modifier = Modifier.fillMaxWidth()) {
+                Text("Выбрать точку старта на карте")
+            }
+
+            if (startPoint != null) {
+                Spacer(Modifier.height(4.dp))
+                TextButton(onClick = { viewModel.setStartPoint(null) }) {
+                    Text("Использовать текущее местоположение")
+                }
+            }
 
             Spacer(Modifier.height(16.dp))
 
