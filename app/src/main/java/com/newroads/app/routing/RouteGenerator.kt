@@ -127,7 +127,7 @@ class RouteGenerator(
         pq.add(fromId to 0.0)
 
         while (pq.isNotEmpty()) {
-            val (nodeId, d) = pq.poll()
+            val (nodeId, d) = pq.poll() ?: break
             if (!visited.add(nodeId)) continue
             if (nodeId == toId) break
 
