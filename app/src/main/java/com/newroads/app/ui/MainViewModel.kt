@@ -35,6 +35,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    private val _statusMessage = MutableStateFlow<String?>(null)
+    val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
+
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
@@ -61,8 +64,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isLoading.value = true
             _errorMessage.value = null
+            _route.value = null
             try {
                 val origin = _startPoint.value ?: run {
+                    _statusMessage.value = "Определяем местоположение..."
                     val location = getLastLocation(getApplication())
                     if (location == null) {
                         _errorMessage.value = "Не удалось определить местоположение"
@@ -73,9 +78,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val targetDistance = _targetSteps.value * STRIDE_METERS
                 val radius = targetDistance / 2.0 * 1.4
 
+                _statusMessage.value = "Загружаем карту дорог поблизости..."
+                val graph = withContext(Dispatchers.IO) {
+                    OverpassClient().fetchGraph(origin.lat, origin.lon, radius)
+                }
+
+                _statusMessage.value = "Читаем историю пройденных дорог..."
+                val visitedKeys = withContext(Dispatchers.IO) { repository.getVisitedKeys() }
+
+                _statusMessage.value = "Строим маршрут..."
                 val result = withContext(Dispatchers.IO) {
-                    val graph = OverpassClient().fetchGraph(origin.lat, origin.lon, radius)
-                    val visitedKeys = repository.getVisitedKeys()
                     RouteGenerator(graph, visitedKeys, STRIDE_METERS)
                         .generateLoop(origin.lat, origin.lon, targetDistance)
                 }
@@ -89,6 +101,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _errorMessage.value = "Ошибка: ${e.message}"
             } finally {
                 _isLoading.value = false
+                _statusMessage.value = null
             }
         }
     }

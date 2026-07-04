@@ -11,13 +11,16 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.newroads.app.location.getLastLocation
 import com.newroads.app.osm.GeoPt
 import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.util.GeoPoint
@@ -32,7 +35,17 @@ fun PickLocationScreen(
     onConfirm: (GeoPt) -> Unit,
     onBack: () -> Unit
 ) {
+    val context = LocalContext.current
     var selected by remember { mutableStateOf<GeoPt?>(null) }
+    var initialCenter by remember { mutableStateOf<GeoPt?>(null) }
+    var hasCentered by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        val location = getLastLocation(context)
+        if (location != null) {
+            initialCenter = GeoPt(location.latitude, location.longitude)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -59,6 +72,13 @@ fun PickLocationScreen(
                 },
                 update = { mapView ->
                     mapView.overlays.clear()
+
+                    if (!hasCentered) {
+                        initialCenter?.let {
+                            mapView.controller.setCenter(GeoPoint(it.lat, it.lon))
+                            hasCentered = true
+                        }
+                    }
 
                     val receiver = object : MapEventsReceiver {
                         override fun singleTapConfirmedHelper(p: GeoPoint): Boolean {

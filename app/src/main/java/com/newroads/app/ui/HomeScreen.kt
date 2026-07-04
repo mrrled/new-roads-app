@@ -1,13 +1,17 @@
 package com.newroads.app.ui
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -36,6 +40,7 @@ fun HomeScreen(
     val targetSteps by viewModel.targetSteps.collectAsState()
     val route by viewModel.route.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val statusMessage by viewModel.statusMessage.collectAsState()
     val error by viewModel.errorMessage.collectAsState()
     val startPoint by viewModel.startPoint.collectAsState()
     var stepsText by remember(targetSteps) { mutableStateOf(targetSteps.toString()) }
@@ -89,7 +94,16 @@ fun HomeScreen(
                 enabled = !isLoading,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(if (isLoading) "Строим маршрут..." else "Сгенерировать маршрут")
+                Text("Сгенерировать маршрут")
+            }
+
+            if (isLoading) {
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text(statusMessage ?: "Строим маршрут...")
+                }
             }
 
             error?.let {
