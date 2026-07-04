@@ -23,12 +23,17 @@ class OverpassClient {
         val body = FormBody.Builder().add("data", query).build()
         val request = Request.Builder()
             .url("https://overpass-api.de/api/interpreter")
+            // Overpass API rejects requests with a generic/missing User-Agent (HTTP 406);
+            // it expects clients to identify themselves.
+            .header("User-Agent", "NewRoadsApp/1.0 (+https://github.com/mrrled/new-roads-app)")
+            .header("Accept", "*/*")
             .post(body)
             .build()
 
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
-                throw OverpassException("Overpass request failed: ${response.code}")
+                val detail = response.body?.string()?.take(300)
+                throw OverpassException("Overpass request failed: ${response.code}${detail?.let { " - $it" } ?: ""}")
             }
             val json = response.body?.string() ?: throw OverpassException("Empty Overpass response")
             return GraphBuilder.build(JSONObject(json))
