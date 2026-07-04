@@ -3,6 +3,7 @@ package com.newroads.app.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.newroads.app.data.RoadGraphRepository
 import com.newroads.app.data.RoadHistoryRepository
 import com.newroads.app.data.db.AppDatabase
 import com.newroads.app.data.db.entity.VisitedSegmentEntity
@@ -11,7 +12,6 @@ import com.newroads.app.location.TrackingRepository
 import com.newroads.app.location.TrackingState
 import com.newroads.app.location.getLastLocation
 import com.newroads.app.osm.GeoPt
-import com.newroads.app.osm.OverpassClient
 import com.newroads.app.osm.OverpassException
 import com.newroads.app.routing.RouteGenerator
 import com.newroads.app.routing.RouteResult
@@ -26,6 +26,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val db = AppDatabase.get(application)
     private val repository = RoadHistoryRepository(db)
+    private val graphRepository = RoadGraphRepository(db.roadGraphCacheDao())
 
     private val _targetSteps = MutableStateFlow(10000)
     val targetSteps: StateFlow<Int> = _targetSteps.asStateFlow()
@@ -79,9 +80,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val targetDistance = _targetSteps.value * STRIDE_METERS
                 val radius = targetDistance / 2.0 * 1.2
 
-                _statusMessage.value = "Загружаем карту дорог поблизости..."
                 val graph = withContext(Dispatchers.IO) {
-                    OverpassClient().fetchGraph(origin.lat, origin.lon, radius)
+                    graphRepository.getGraph(origin.lat, origin.lon, radius) {
+                        _statusMessage.value = it
+                    }
                 }
 
                 _statusMessage.value = "Читаем историю пройденных дорог..."

@@ -4,20 +4,23 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.newroads.app.data.db.dao.RoadGraphCacheDao
 import com.newroads.app.data.db.dao.VisitedSegmentDao
 import com.newroads.app.data.db.dao.WalkRecordDao
+import com.newroads.app.data.db.entity.RoadGraphCacheEntity
 import com.newroads.app.data.db.entity.VisitedSegmentEntity
 import com.newroads.app.data.db.entity.WalkRecordEntity
 
 @Database(
-    entities = [VisitedSegmentEntity::class, WalkRecordEntity::class],
-    version = 1,
+    entities = [VisitedSegmentEntity::class, WalkRecordEntity::class, RoadGraphCacheEntity::class],
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun visitedSegmentDao(): VisitedSegmentDao
     abstract fun walkRecordDao(): WalkRecordDao
+    abstract fun roadGraphCacheDao(): RoadGraphCacheDao
 
     companion object {
         @Volatile
@@ -29,7 +32,10 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "newroads.db"
-                ).build().also { INSTANCE = it }
+                )
+                    // No user has real history worth migrating yet at this stage of development.
+                    .fallbackToDestructiveMigration()
+                    .build().also { INSTANCE = it }
             }
     }
 }
