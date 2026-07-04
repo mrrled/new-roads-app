@@ -3,6 +3,7 @@ package com.newroads.app.osm
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
 import java.net.SocketTimeoutException
@@ -83,7 +84,30 @@ class OverpassClient {
                 val detail = response.body?.string()?.take(300)
                 throw OverpassException("Overpass request failed: ${response.code}${detail?.let { " - $it" } ?: ""}")
             }
-            return response.body?.string() ?: throw OverpassException("Empty Overpass response")
+            val json = response.body?.string() ?: throw OverpassException("Empty Overpass response")
+            validate(json)
+            return json
+        }
+    }
+
+    /**
+     * Overpass sometimes answers with a normal HTTP 200 even when the query failed server-side
+     * (e.g. it ran out of its own [timeout:...] budget under load) — the body then carries a
+     * "remark" instead of an "elements" array. Treating that as success would silently cache an
+     * empty road graph for this area for days, so it's rejected here to let the caller retry a
+     * different mirror instead.
+     */
+    private fun validate(json: String) {
+        val root = try {
+            JSONObject(json)
+        } catch (e: JSONException) {
+            throw OverpassException("Overpass returned invalid JSON")
+        }
+        if (root.has("remark")) {
+            throw OverpassException("Overpass error: ${root.optString("remark")}")
+        }
+        if (!root.has("elements")) {
+            throw OverpassException("Overpass response has no data (likely a server-side timeout)")
         }
     }
 

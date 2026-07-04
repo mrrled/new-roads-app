@@ -32,13 +32,18 @@ class RoadGraphRepository(
         val cutoff = System.currentTimeMillis() - CACHE_TTL_MILLIS
 
         cacheDao.findFresh(latRounded, lonRounded, radiusBucket, cutoff)?.let { cached ->
-            onStatus("Используем сохранённую карту дорог поблизости...")
-            return GraphBuilder.build(
+            val cachedGraph = GraphBuilder.build(
                 JSONObject(cached.rawJson),
                 centerLat,
                 centerLon,
                 cached.radiusBucketMeters.toDouble()
             )
+            // A cached entry can be an empty graph from an earlier bad/incomplete response.
+            // Don't trust it for a full week — fall through to a fresh fetch instead.
+            if (!cachedGraph.isEmpty) {
+                onStatus("Используем сохранённую карту дорог поблизости...")
+                return cachedGraph
+            }
         }
 
         val rawJson = overpassClient.fetchGraphJson(centerLat, centerLon, radiusMeters, onStatus)
