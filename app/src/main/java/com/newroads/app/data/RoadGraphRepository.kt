@@ -33,7 +33,12 @@ class RoadGraphRepository(
 
         cacheDao.findFresh(latRounded, lonRounded, radiusBucket, cutoff)?.let { cached ->
             onStatus("Используем сохранённую карту дорог поблизости...")
-            return GraphBuilder.build(JSONObject(cached.rawJson))
+            return GraphBuilder.build(
+                JSONObject(cached.rawJson),
+                centerLat,
+                centerLon,
+                cached.radiusBucketMeters.toDouble()
+            )
         }
 
         val rawJson = overpassClient.fetchGraphJson(centerLat, centerLon, radiusMeters, onStatus)
@@ -49,7 +54,7 @@ class RoadGraphRepository(
             )
         )
 
-        return GraphBuilder.build(JSONObject(rawJson))
+        return GraphBuilder.build(JSONObject(rawJson), centerLat, centerLon, radiusBucket.toDouble())
     }
 
     // ~111m per 0.001 degree of latitude; close enough to bucket "the same spot" for caching.

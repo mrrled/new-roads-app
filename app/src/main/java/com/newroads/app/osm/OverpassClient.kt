@@ -61,7 +61,12 @@ class OverpassClient {
     }
 
     fun fetchGraph(centerLat: Double, centerLon: Double, radiusMeters: Double): RoadGraph =
-        GraphBuilder.build(JSONObject(fetchGraphJson(centerLat, centerLon, radiusMeters)))
+        GraphBuilder.build(
+            JSONObject(fetchGraphJson(centerLat, centerLon, radiusMeters)),
+            centerLat,
+            centerLon,
+            radiusMeters
+        )
 
     private fun execute(endpoint: String, body: FormBody): String {
         val request = Request.Builder()

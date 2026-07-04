@@ -62,7 +62,10 @@ class RouteGenerator(
 
         if (outboundEdges.isEmpty()) return null
 
-        val returnEdges = dijkstraPreferUnvisited(currentId, startNode.id) ?: return null
+        // If no path back exists in the fetched graph (e.g. the outbound walk reached the edge
+        // of the area we queried), fall back to retracing the outbound edges in reverse — that
+        // path is always available, so a loop can basically always be produced.
+        val returnEdges = dijkstraPreferUnvisited(currentId, startNode.id) ?: outboundEdges.asReversed()
 
         val allPoints = mutableListOf<GeoPt>()
         var cursor = startNode.id
