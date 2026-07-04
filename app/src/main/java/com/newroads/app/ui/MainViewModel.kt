@@ -12,6 +12,7 @@ import com.newroads.app.location.TrackingState
 import com.newroads.app.location.getLastLocation
 import com.newroads.app.osm.GeoPt
 import com.newroads.app.osm.OverpassClient
+import com.newroads.app.osm.OverpassException
 import com.newroads.app.routing.RouteGenerator
 import com.newroads.app.routing.RouteResult
 import kotlinx.coroutines.Dispatchers
@@ -76,7 +77,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     GeoPt(location.latitude, location.longitude)
                 }
                 val targetDistance = _targetSteps.value * STRIDE_METERS
-                val radius = targetDistance / 2.0 * 1.4
+                val radius = targetDistance / 2.0 * 1.2
 
                 _statusMessage.value = "Загружаем карту дорог поблизости..."
                 val graph = withContext(Dispatchers.IO) {
@@ -97,6 +98,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     _route.value = result
                 }
+            } catch (e: OverpassException) {
+                _errorMessage.value = e.message
             } catch (e: Exception) {
                 _errorMessage.value = "Ошибка: ${e.message}"
             } finally {

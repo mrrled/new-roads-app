@@ -4,6 +4,7 @@ import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
+import java.net.SocketTimeoutException
 import java.util.concurrent.TimeUnit
 
 /**
@@ -13,8 +14,9 @@ import java.util.concurrent.TimeUnit
 class OverpassClient {
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(QUERY_TIMEOUT_SECONDS + 15L, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
     /** [radiusMeters] is roughly how far from the center point to fetch road data. */
@@ -30,13 +32,20 @@ class OverpassClient {
             .post(body)
             .build()
 
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                val detail = response.body?.string()?.take(300)
-                throw OverpassException("Overpass request failed: ${response.code}${detail?.let { " - $it" } ?: ""}")
+        try {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    val detail = response.body?.string()?.take(300)
+                    throw OverpassException("Overpass request failed: ${response.code}${detail?.let { " - $it" } ?: ""}")
+                }
+                val json = response.body?.string() ?: throw OverpassException("Empty Overpass response")
+                return GraphBuilder.build(JSONObject(json))
             }
-            val json = response.body?.string() ?: throw OverpassException("Empty Overpass response")
-            return GraphBuilder.build(JSONObject(json))
+        } catch (e: SocketTimeoutException) {
+            throw OverpassException(
+                "Сервер карт долго отвечает (радиус поиска ${radiusMeters.toInt()} м). " +
+                    "Попробуйте ещё раз или уменьшите цель по шагам."
+            )
         }
     }
 
@@ -44,10 +53,14 @@ class OverpassClient {
         val highways = "footway|path|residential|living_street|pedestrian|track|unclassified|" +
             "tertiary|secondary|primary|service|cycleway|steps"
         return """
-            [out:json][timeout:25];
+            [out:json][timeout:$QUERY_TIMEOUT_SECONDS];
             way(around:$radiusMeters,$lat,$lon)["highway"~"^($highways)$"]["area"!~"yes"];
             out body geom;
         """.trimIndent()
+    }
+
+    companion object {
+        private const val QUERY_TIMEOUT_SECONDS = 45L
     }
 }
 
