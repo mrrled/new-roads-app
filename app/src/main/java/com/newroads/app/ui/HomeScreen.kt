@@ -66,6 +66,15 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
+            Spacer(Modifier.height(4.dp))
+
+            Text(
+                text = "Фактический маршрут может отличаться от цели на ±500 шагов",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth()
+            )
+
             Spacer(Modifier.height(16.dp))
 
             Text(

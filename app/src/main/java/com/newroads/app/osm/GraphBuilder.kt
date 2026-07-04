@@ -10,11 +10,15 @@ object GraphBuilder {
      * requested search radius (e.g. a long road that just clips the edge of the query area).
      * Treating such a way as a single edge from its first to its last node can produce an edge
      * that reaches far outside [centerLat]/[centerLon], with no other nearby edges to connect
-     * back to it. To keep the graph contained within the area we actually asked for, each way is
-     * clipped down to its longest contiguous run of points within [maxDistanceMeters] of the
-     * center (plus one point of margin on each side).
+     * back to it. To keep the graph roughly contained within the area we actually asked for,
+     * each way is clipped down to its longest contiguous run of points within
+     * [requestedRadiusMeters] * [CLIP_BUFFER_MULTIPLIER] of the center (plus one point of margin
+     * on each side). The buffer is deliberately generous — Overpass's "around" filter matches a
+     * way if its line passes within radius even when no vertex does, so clipping too tightly can
+     * end up dropping ways (and, in a small-radius query, leave the graph empty).
      */
-    fun build(root: JSONObject, centerLat: Double, centerLon: Double, maxDistanceMeters: Double): RoadGraph {
+    fun build(root: JSONObject, centerLat: Double, centerLon: Double, requestedRadiusMeters: Double): RoadGraph {
+        val maxDistanceMeters = requestedRadiusMeters * CLIP_BUFFER_MULTIPLIER
         val elements = root.optJSONArray("elements") ?: return RoadGraph(emptyMap(), emptyMap())
 
         val nodes = HashMap<Long, GraphNode>()
@@ -35,7 +39,12 @@ object GraphBuilder {
             }
             val rawNodeIds = (0 until nodeIdsArray.length()).map { nodeIdsArray.getLong(it) }
 
-            val range = longestRunWithinRadius(rawPoints, centerLat, centerLon, maxDistanceMeters) ?: continue
+            // Overpass's "around" filter matches a way if its *line* passes within radius, even
+            // when none of its actual vertices do (e.g. a long straight segment passing tangent
+            // close to the center). If we can't find any vertex within radius, keep the whole way
+            // rather than silently dropping it — an oversized edge is better than an empty graph.
+            val range = longestRunWithinRadius(rawPoints, centerLat, centerLon, maxDistanceMeters)
+                ?: (0 until rawPoints.size)
             val start = (range.first - 1).coerceAtLeast(0)
             val end = (range.last + 1).coerceAtMost(rawPoints.lastIndex)
 
@@ -94,4 +103,6 @@ object GraphBuilder {
         }
         return if (bestStart == -1) null else bestStart until (bestStart + bestLength)
     }
+
+    private const val CLIP_BUFFER_MULTIPLIER = 1.6
 }

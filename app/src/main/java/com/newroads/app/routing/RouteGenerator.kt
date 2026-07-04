@@ -35,7 +35,36 @@ class RouteGenerator(
     private val random: Random = Random.Default
 ) {
 
-    fun generateLoop(startLat: Double, startLon: Double, targetDistanceMeters: Double): RouteResult? {
+    /**
+     * Builds a loop close to [targetDistanceMeters], allowing up to [toleranceMeters] of slack.
+     * Since the walk is randomized, a single attempt can land outside that tolerance (or fail to
+     * find a loop at all) — so this retries up to [maxAttempts] times, returning immediately once
+     * an attempt lands within tolerance, and otherwise keeping the closest candidate found.
+     */
+    fun generateLoop(
+        startLat: Double,
+        startLon: Double,
+        targetDistanceMeters: Double,
+        toleranceMeters: Double = 500 * strideMeters,
+        maxAttempts: Int = 8
+    ): RouteResult? {
+        var best: RouteResult? = null
+        var bestDiff = Double.MAX_VALUE
+
+        repeat(maxAttempts) {
+            val candidate = attemptLoop(startLat, startLon, targetDistanceMeters) ?: return@repeat
+            val diff = kotlin.math.abs(candidate.distanceMeters - targetDistanceMeters)
+            if (diff <= toleranceMeters) return candidate
+            if (diff < bestDiff) {
+                bestDiff = diff
+                best = candidate
+            }
+        }
+
+        return best
+    }
+
+    private fun attemptLoop(startLat: Double, startLon: Double, targetDistanceMeters: Double): RouteResult? {
         if (graph.isEmpty) return null
         val startNode = graph.nearestNode(startLat, startLon) ?: return null
 
