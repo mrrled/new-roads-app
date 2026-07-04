@@ -86,6 +86,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
 
+                if (graph.isEmpty) {
+                    _errorMessage.value = "Не нашли ни одной дороги в радиусе ${radius.toInt()} м. " +
+                        "Проверьте интернет-соединение или попробуйте другую точку старта."
+                    return@launch
+                }
+
                 _statusMessage.value = "Читаем историю пройденных дорог..."
                 val visitedKeys = withContext(Dispatchers.IO) { repository.getVisitedKeys() }
 
