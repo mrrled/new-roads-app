@@ -49,15 +49,21 @@ class RoadGraphRepository(
         val rawJson = overpassClient.fetchGraphJson(centerLat, centerLon, radiusMeters, onStatus)
 
         cacheDao.deleteOlderThan(cutoff)
-        cacheDao.insert(
-            RoadGraphCacheEntity(
-                centerLatRounded = latRounded,
-                centerLonRounded = lonRounded,
-                radiusBucketMeters = radiusBucket,
-                fetchedAt = System.currentTimeMillis(),
-                rawJson = rawJson
+        // Android's SQLite CursorWindow caps a single read row at ~2 MB, so caching a very large
+        // response (a big radius over a dense city can be 10+ MB) would only blow up later when we
+        // try to read it back. Skip caching those — they're re-fetched each time, but at least the
+        // route still generates.
+        if (rawJson.length <= MAX_CACHEABLE_CHARS) {
+            cacheDao.insert(
+                RoadGraphCacheEntity(
+                    centerLatRounded = latRounded,
+                    centerLonRounded = lonRounded,
+                    radiusBucketMeters = radiusBucket,
+                    fetchedAt = System.currentTimeMillis(),
+                    rawJson = rawJson
+                )
             )
-        )
+        }
 
         return GraphBuilder.build(JSONObject(rawJson), centerLat, centerLon, radiusBucket.toDouble())
     }
@@ -68,5 +74,7 @@ class RoadGraphRepository(
     companion object {
         private const val BUCKET_METERS = 500
         private val CACHE_TTL_MILLIS = TimeUnit.DAYS.toMillis(7)
+        // Stay well under the ~2 MB SQLite CursorWindow read limit.
+        private const val MAX_CACHEABLE_CHARS = 1_500_000
     }
 }

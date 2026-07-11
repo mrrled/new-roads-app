@@ -72,13 +72,26 @@ class OverpassClient {
 
         try {
             var lastError: Throwable? = null
+            var emptyResponse: String? = null
             var received = 0
             while (received < ENDPOINTS.size) {
                 val result = results.receive()
                 received++
-                result.getOrNull()?.let { return@coroutineScope it }
-                lastError = result.exceptionOrNull()
+                val json = result.getOrNull()
+                if (json != null) {
+                    // A response with actual roads wins the race outright. An empty-but-valid
+                    // response (e.g. from a mirror that only holds a regional extract and thus
+                    // returns nothing for this area) must NOT beat a slower full response, so it's
+                    // only used as a last resort if every endpoint comes back empty.
+                    if (hasRoads(json)) return@coroutineScope json
+                    emptyResponse = json
+                } else {
+                    lastError = result.exceptionOrNull()
+                }
             }
+            // Every endpoint answered but none had roads: fall back to an empty response (the
+            // caller reports "no roads here") rather than a network error, if we got one at all.
+            emptyResponse?.let { return@coroutineScope it }
             throw OverpassException(
                 if (lastError is SocketTimeoutException || lastError is InterruptedIOException) {
                     "Все серверы карт долго отвечают. Попробуйте ещё раз или уменьшите цель по шагам."
@@ -90,6 +103,9 @@ class OverpassClient {
             jobs.forEach { it.cancel() }
         }
     }
+
+    /** Cheap check for whether a validated response actually contains any ways (skel geom ways carry "nodes"). */
+    private fun hasRoads(json: String): Boolean = json.contains("\"nodes\"")
 
     /** Performs one Overpass request, cancelling the underlying HTTP call if the coroutine is cancelled. */
     private suspend fun requestJson(endpoint: String, body: FormBody): String =
@@ -164,10 +180,12 @@ class OverpassClient {
         private const val QUERY_TIMEOUT_SECONDS = 20L
         private const val PER_ATTEMPT_TIMEOUT_SECONDS = 25L
 
+        // Only global (whole-planet) instances. A regional mirror (e.g. overpass.openstreetmap.ru,
+        // which mainly holds Russia/CIS data) would return an empty result for other areas, which
+        // used to wrongly win the parallel race and make the app think there were no roads.
         private val ENDPOINTS = listOf(
             "https://overpass-api.de/api/interpreter",
             "https://overpass.kumi.systems/api/interpreter",
-            "https://overpass.openstreetmap.ru/api/interpreter",
             "https://overpass.osm.ch/api/interpreter"
         )
     }
