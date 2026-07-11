@@ -2,7 +2,9 @@ package com.newroads.app.routing
 
 import com.newroads.app.osm.GeoPt
 import com.newroads.app.osm.GraphEdge
+import com.newroads.app.osm.GraphNode
 import com.newroads.app.osm.RoadGraph
+import com.newroads.app.osm.haversineMeters
 import com.newroads.app.osm.orientedPoints
 import com.newroads.app.osm.otherEnd
 import com.newroads.app.osm.segmentKey
@@ -68,7 +70,9 @@ class RouteGenerator(
         if (graph.isEmpty) return null
         val startNode = graph.nearestNode(startLat, startLon) ?: return null
 
-        val half = targetDistanceMeters / 2.0
+        // Aim the outbound leg a bit past half: the return leg is a shortest path, so it's typically
+        // shorter than the meandering way out, and without this the loop lands well under target.
+        val half = targetDistanceMeters * OUTBOUND_FRACTION
         val outboundEdges = mutableListOf<GraphEdge>()
         val usedInRoute = mutableSetOf<String>()
 
@@ -77,11 +81,13 @@ class RouteGenerator(
         var distanceSoFar = 0.0
 
         while (distanceSoFar < half) {
-            val candidates = graph.edgesByNode[currentId].orEmpty()
-                .filter { edgeKey(it) != previousEdgeKey }
-            if (candidates.isEmpty()) break
+            val allEdges = graph.edgesByNode[currentId].orEmpty()
+            if (allEdges.isEmpty()) break
+            // Prefer not to immediately backtrack, but if that's the only option (a dead-end /
+            // cul-de-sac) take it rather than abandoning the whole walk far short of the target.
+            val candidates = allEdges.filter { edgeKey(it) != previousEdgeKey }.ifEmpty { allEdges }
 
-            val chosen = pickWeighted(candidates, usedInRoute)
+            val chosen = pickOutbound(candidates, usedInRoute, currentId, startNode)
             outboundEdges += chosen
             usedInRoute += edgeKey(chosen)
             distanceSoFar += chosen.lengthMeters
@@ -132,11 +138,34 @@ class RouteGenerator(
         return e.lengthMeters * if (visited) 3.0 else 1.0
     }
 
-    private fun pickWeighted(candidates: List<GraphEdge>, usedInRoute: Set<String>): GraphEdge {
+    /**
+     * Chooses the next edge for the outbound leg. To actually reach far enough from the start that a
+     * loop of the target length is possible, edges that move *away* from the start are strongly
+     * preferred (a plain random walk mostly mills around near the start). Among those, roads not yet
+     * used in this route are preferred, and roads the user hasn't walked before are preferred again —
+     * so the walk both travels outward and favours new streets.
+     */
+    private fun pickOutbound(
+        candidates: List<GraphEdge>,
+        usedInRoute: Set<String>,
+        currentId: Long,
+        startNode: GraphNode
+    ): GraphEdge {
         val fresh = candidates.filterNot { edgeKey(it) in usedInRoute }
         val pool = if (fresh.isNotEmpty()) fresh else candidates
 
-        val weights = pool.map { if (edgeKey(it) in visitedKeys) 1.0 else 5.0 }
+        val currentNode = graph.nodes[currentId]
+        val currentDist = currentNode?.let { haversineMeters(it.lat, it.lon, startNode.lat, startNode.lon) } ?: 0.0
+
+        val weights = pool.map { edge ->
+            val endId = otherEnd(edge, currentId)
+            val endNode = graph.nodes[endId]
+            val outward = if (endNode != null &&
+                haversineMeters(endNode.lat, endNode.lon, startNode.lat, startNode.lon) > currentDist
+            ) 4.0 else 1.0
+            val novelty = if (edgeKey(edge) in visitedKeys) 1.0 else 2.0
+            outward * novelty
+        }
         val total = weights.sum()
         var r = random.nextDouble() * total
         for (i in pool.indices) {
@@ -185,5 +214,9 @@ class RouteGenerator(
             cur = prevNode[cur] ?: return null
         }
         return path
+    }
+
+    private companion object {
+        const val OUTBOUND_FRACTION = 0.6
     }
 }
