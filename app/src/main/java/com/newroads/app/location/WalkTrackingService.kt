@@ -1,13 +1,16 @@
 package com.newroads.app.location
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -34,11 +37,27 @@ class WalkTrackingService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Android 14+ throws a SecurityException when starting a location-type foreground
+        // service without a granted location permission — bail out instead of crashing.
+        if (!hasLocationPermission()) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
         startForeground(NOTIFICATION_ID, buildNotification())
-        TrackingRepository.start()
+        // START_STICKY means the system may re-deliver onStartCommand mid-walk after killing the
+        // process; only reset the walk state when a walk isn't already being recorded.
+        if (!TrackingRepository.state.value.isTracking) {
+            TrackingRepository.start()
+        }
         startLocationUpdates()
         return START_STICKY
     }
+
+    private fun hasLocationPermission(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
 
     @SuppressLint("MissingPermission")
     private fun startLocationUpdates() {

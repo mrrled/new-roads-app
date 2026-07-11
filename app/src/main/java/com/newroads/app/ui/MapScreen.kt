@@ -1,6 +1,9 @@
 package com.newroads.app.ui
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import com.newroads.app.data.RoadHistoryRepository
 import com.newroads.app.location.WalkTrackingService
 import org.osmdroid.util.GeoPoint
@@ -105,7 +109,20 @@ fun MapScreen(viewModel: MainViewModel, onBack: () -> Unit) {
             ) {
                 if (!tracking.isTracking) {
                     Button(onClick = {
-                        context.startForegroundService(Intent(context, WalkTrackingService::class.java))
+                        val hasPermission = ContextCompat.checkSelfPermission(
+                            context, Manifest.permission.ACCESS_FINE_LOCATION
+                        ) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(
+                            context, Manifest.permission.ACCESS_COARSE_LOCATION
+                        ) == PackageManager.PERMISSION_GRANTED
+                        if (hasPermission) {
+                            context.startForegroundService(Intent(context, WalkTrackingService::class.java))
+                        } else {
+                            Toast.makeText(
+                                context,
+                                "Нет доступа к геолокации — разрешите её в настройках приложения",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
                     }) { Text("Начать запись") }
                 } else {
                     Button(onClick = {
