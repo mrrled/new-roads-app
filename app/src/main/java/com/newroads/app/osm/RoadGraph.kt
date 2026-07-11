@@ -29,6 +29,17 @@ class RoadGraph(
     val isEmpty: Boolean get() = nodes.isEmpty()
 }
 
+/**
+ * A stable, direction-independent key identifying a road segment (an OSM way between two nodes),
+ * used both for the visited-roads history and for the route generator. Pure and Android-free so it
+ * can be shared and unit-tested without pulling in the persistence layer.
+ */
+fun segmentKey(wayId: Long, fromNode: Long, toNode: Long): String {
+    val from = minOf(fromNode, toNode)
+    val to = maxOf(fromNode, toNode)
+    return "${wayId}_${from}_$to"
+}
+
 fun otherEnd(edge: GraphEdge, fromNodeId: Long): Long =
     if (edge.fromNode == fromNodeId) edge.toNode else edge.fromNode
 

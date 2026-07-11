@@ -47,11 +47,8 @@ class RoadHistoryRepository(private val db: AppDatabase) {
         db.walkRecordDao().getAll()
 
     companion object {
-        fun segmentKey(wayId: Long, fromNode: Long, toNode: Long): String {
-            val from = minOf(fromNode, toNode)
-            val to = maxOf(fromNode, toNode)
-            return "${wayId}_${from}_$to"
-        }
+        fun segmentKey(wayId: Long, fromNode: Long, toNode: Long): String =
+            com.newroads.app.osm.segmentKey(wayId, fromNode, toNode)
 
         fun encodePoints(points: List<GeoPt>): String =
             points.joinToString(";") { "${it.lat},${it.lon}" }

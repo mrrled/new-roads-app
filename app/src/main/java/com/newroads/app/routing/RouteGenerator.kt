@@ -1,11 +1,11 @@
 package com.newroads.app.routing
 
-import com.newroads.app.data.RoadHistoryRepository
 import com.newroads.app.osm.GeoPt
 import com.newroads.app.osm.GraphEdge
 import com.newroads.app.osm.RoadGraph
 import com.newroads.app.osm.orientedPoints
 import com.newroads.app.osm.otherEnd
+import com.newroads.app.osm.segmentKey
 import java.util.PriorityQueue
 import kotlin.random.Random
 
@@ -125,7 +125,7 @@ class RouteGenerator(
     }
 
     private fun edgeKey(e: GraphEdge): String =
-        RoadHistoryRepository.segmentKey(e.wayId, e.fromNode, e.toNode)
+        segmentKey(e.wayId, e.fromNode, e.toNode)
 
     private fun edgeCost(e: GraphEdge): Double {
         val visited = edgeKey(e) in visitedKeys
