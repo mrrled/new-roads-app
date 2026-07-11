@@ -193,8 +193,10 @@ class OverpassClient {
     }
 
     private fun buildQuery(lat: Double, lon: Double, radiusMeters: Double): String {
+        // No highway=service: those are courtyard/driveway/parking-aisle roads inside residential
+        // blocks — the user doesn't want walks routed through building courtyards.
         val highways = "footway|path|residential|living_street|pedestrian|track|unclassified|" +
-            "tertiary|secondary|primary|service|cycleway|steps"
+            "tertiary|secondary|primary|cycleway|steps"
         return """
             [out:json][timeout:$QUERY_TIMEOUT_SECONDS];
             way(around:$radiusMeters,$lat,$lon)["highway"~"^($highways)$"]["area"!~"yes"];
