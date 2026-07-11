@@ -17,17 +17,32 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import com.newroads.app.data.RoadHistoryRepository
+import com.newroads.app.data.db.AppDatabase
 import com.newroads.app.osm.GeoPt
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 /** Foreground service that records the user's GPS path while a walk is in progress. */
 class WalkTrackingService : Service() {
 
     private lateinit var fusedClient: FusedLocationProviderClient
     private lateinit var locationCallback: LocationCallback
+    private lateinit var historyRepository: RoadHistoryRepository
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private var matchingJob: Job? = null
 
     override fun onCreate() {
         super.onCreate()
         fusedClient = LocationServices.getFusedLocationProviderClient(this)
+        historyRepository = RoadHistoryRepository(AppDatabase.get(applicationContext))
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
                 val location = result.lastLocation ?: return
@@ -48,9 +63,26 @@ class WalkTrackingService : Service() {
         // process; only reset the walk state when a walk isn't already being recorded.
         if (!TrackingRepository.state.value.isTracking) {
             TrackingRepository.start()
+            scope.launch { WalkSession.begin(historyRepository) }
         }
         startLocationUpdates()
+        startLiveMatching()
         return START_STICKY
+    }
+
+    /**
+     * Credits walked roads *during* the walk: every [MATCH_INTERVAL_MS] the track so far is
+     * map-matched and newly covered segments are persisted immediately, so nothing is lost if the
+     * app dies mid-walk and the map can show progress live.
+     */
+    private fun startLiveMatching() {
+        if (matchingJob?.isActive == true) return
+        matchingJob = scope.launch {
+            while (isActive) {
+                delay(MATCH_INTERVAL_MS)
+                WalkSession.processTrack(TrackingRepository.state.value.points, historyRepository)
+            }
+        }
     }
 
     private fun hasLocationPermission(): Boolean =
@@ -69,6 +101,7 @@ class WalkTrackingService : Service() {
 
     override fun onDestroy() {
         fusedClient.removeLocationUpdates(locationCallback)
+        scope.cancel()
         super.onDestroy()
     }
 
@@ -90,5 +123,6 @@ class WalkTrackingService : Service() {
 
     companion object {
         private const val NOTIFICATION_ID = 1001
+        private const val MATCH_INTERVAL_MS = 15_000L
     }
 }

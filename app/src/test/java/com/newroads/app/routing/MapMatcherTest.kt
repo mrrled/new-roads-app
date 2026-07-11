@@ -86,6 +86,25 @@ class MapMatcherTest {
     }
 
     @Test
+    fun excludedEdges_areSkippedOnIncrementalCalls() {
+        // Live sessions call the matcher repeatedly; edges already credited must not be returned again.
+        val a = GeoPt(lat, lon)
+        val b = GeoPt(lat + 2 * dLat, lon)
+        val e = edge(1, 1, 2, a, b)
+        val graph = graphOf(e)
+        val track = trackAlong(a, b)
+
+        val first = MapMatcher.matchWalkedEdges(track, graph)
+        assertEquals(1, first.size)
+
+        val alreadyCredited = first.map {
+            com.newroads.app.osm.segmentKey(it.wayId, it.fromNode, it.toNode)
+        }.toSet()
+        val second = MapMatcher.matchWalkedEdges(track, graph, excludeKeys = alreadyCredited)
+        assertTrue("second incremental pass must return nothing new", second.isEmpty())
+    }
+
+    @Test
     fun emptyTrack_matchesNothing() {
         val a = GeoPt(lat, lon)
         val b = GeoPt(lat + dLat, lon)

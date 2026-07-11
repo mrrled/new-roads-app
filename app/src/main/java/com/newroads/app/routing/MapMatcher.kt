@@ -23,7 +23,15 @@ object MapMatcher {
     private const val SAMPLE_STEP_METERS = 15.0
     private const val COVERAGE_FRACTION = 0.6
 
-    fun matchWalkedEdges(track: List<GeoPt>, graph: RoadGraph): List<GraphEdge> {
+    /**
+     * [excludeKeys] lets a live session skip edges it has already credited during this walk,
+     * so repeated incremental calls only return newly covered segments.
+     */
+    fun matchWalkedEdges(
+        track: List<GeoPt>,
+        graph: RoadGraph,
+        excludeKeys: Set<String> = emptySet()
+    ): List<GraphEdge> {
         if (track.size < 2) return emptyList()
         val index = TrackIndex(track, NEAR_METERS)
 
@@ -31,7 +39,9 @@ object MapMatcher {
         val seen = HashSet<String>() // every edge is listed under both endpoints — visit it once
         for (edges in graph.edgesByNode.values) {
             for (edge in edges) {
-                if (!seen.add(segmentKey(edge.wayId, edge.fromNode, edge.toNode))) continue
+                val key = segmentKey(edge.wayId, edge.fromNode, edge.toNode)
+                if (!seen.add(key)) continue
+                if (key in excludeKeys) continue
                 if (isCovered(edge, index)) walked.add(edge)
             }
         }

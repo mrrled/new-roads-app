@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.newroads.app.data.RoadHistoryRepository
+import com.newroads.app.location.WalkSession
 import com.newroads.app.location.WalkTrackingService
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
@@ -38,8 +39,10 @@ fun MapScreen(viewModel: MainViewModel, onBack: () -> Unit) {
     val route by viewModel.route.collectAsState()
     val tracking by viewModel.trackingState.collectAsState()
     val visitedSegments by viewModel.visitedSegments.collectAsState()
+    val walkedKeys by WalkSession.walkedKeys.collectAsState()
 
-    LaunchedEffect(Unit) { viewModel.loadHistory() }
+    // Reload on every live-credited road so streets turn "walked" on the map during the walk.
+    LaunchedEffect(walkedKeys) { viewModel.loadHistory() }
 
     Scaffold(
         topBar = {
