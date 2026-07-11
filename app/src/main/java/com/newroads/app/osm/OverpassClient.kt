@@ -207,13 +207,15 @@ class OverpassClient {
         private const val PER_ATTEMPT_TIMEOUT_SECONDS = 35L
         private const val HEDGE_DELAY_MS = 3000L
 
-        // Only global (whole-planet) instances. A regional mirror (e.g. overpass.openstreetmap.ru,
-        // which mainly holds Russia/CIS data) would return an empty result for other areas, which
-        // used to wrongly win the parallel race and make the app think there were no roads.
+        // Only whole-planet instances, verified to return data for arbitrary locations. This matters
+        // a lot: a REGIONAL mirror (overpass.openstreetmap.ru holds ~Russia/CIS, overpass.osm.ch
+        // holds ~Switzerland) returns an empty-but-valid result almost instantly for anywhere else.
+        // If the busy global servers were slow while a regional one answered empty, the app wrongly
+        // concluded "no roads here". kumi.systems is global but was unreliable/timing out in testing.
         private val ENDPOINTS = listOf(
             "https://overpass-api.de/api/interpreter",
-            "https://overpass.kumi.systems/api/interpreter",
-            "https://overpass.osm.ch/api/interpreter"
+            "https://overpass.openstreetmap.fr/api/interpreter",
+            "https://maps.mail.ru/osm/tools/overpass/api/interpreter"
         )
     }
 }
