@@ -18,10 +18,7 @@ class RouteGeneratorTest {
     private val stride = 0.75
 
     private fun gridGraph(cols: Int = 41, rows: Int = 41, spacing: Double = 100.0): RoadGraph =
-        GraphBuilder.buildGraph(
-            TestGraphs.grid(cols, rows, spacing, centerLat, centerLon),
-            centerLat, centerLon, requestedRadiusMeters = spacing * maxOf(cols, rows)
-        )
+        GraphBuilder.buildGraph(TestGraphs.grid(cols, rows, spacing, centerLat, centerLon))
 
     @Test
     fun generateLoop_onGrid_returnsRouteNearTargetLength() {
@@ -86,10 +83,7 @@ class RouteGeneratorTest {
         val radius = target / 2.0 * 0.8 // ≈ 3000m, matching MainViewModel
         // Grid spanning ~2 * radius across, at 120m spacing.
         val cols = (2 * radius / 120).toInt()
-        val graph = GraphBuilder.buildGraph(
-            TestGraphs.grid(cols, cols, 120.0, centerLat, centerLon),
-            centerLat, centerLon, requestedRadiusMeters = radius
-        )
+        val graph = GraphBuilder.buildGraph(TestGraphs.grid(cols, cols, 120.0, centerLat, centerLon))
 
         val result = RouteGenerator(graph, emptySet(), stride, Random(3))
             .generateLoop(centerLat, centerLon, target, toleranceMeters = 500 * stride, maxAttempts = 16)

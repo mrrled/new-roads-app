@@ -13,22 +13,20 @@ class GraphBuilderTest {
     @Test
     fun buildGraph_fromSmallGrid_isNotEmpty() {
         val ways = TestGraphs.grid(cols = 5, rows = 5, spacingMeters = 100.0, centerLat = centerLat, centerLon = centerLon)
-        val graph = GraphBuilder.buildGraph(ways, centerLat, centerLon, requestedRadiusMeters = 450.0)
+        val graph = GraphBuilder.buildGraph(ways)
 
         assertFalse("grid should produce a non-empty graph", graph.isEmpty)
         assertEquals("all 25 grid nodes should be present", 25, graph.nodes.size)
     }
 
     /**
-     * Reproduces the reported failure: a 10000-step target uses a ~4500m radius. A dense grid
-     * spanning that area must still build a rich, non-empty graph — this is what "no roads found"
-     * would violate.
+     * Reproduces the reported failure: a 10000-step target uses a large radius. A dense grid spanning
+     * that area must still build a rich, non-empty graph — this is what "no roads found" would violate.
      */
     @Test
-    fun buildGraph_largeRadiusDenseArea_isNotEmpty() {
-        // 61x61 grid at 150m spacing ≈ 9km across, comparable to a 4500m-radius query.
+    fun buildGraph_largeDenseArea_isNotEmpty() {
         val ways = TestGraphs.grid(cols = 61, rows = 61, spacingMeters = 150.0, centerLat = centerLat, centerLon = centerLon)
-        val graph = GraphBuilder.buildGraph(ways, centerLat, centerLon, requestedRadiusMeters = 4500.0)
+        val graph = GraphBuilder.buildGraph(ways)
 
         assertFalse("large-area grid should produce a non-empty graph", graph.isEmpty)
         assertTrue("should retain thousands of nodes", graph.nodes.size > 3000)
@@ -36,46 +34,47 @@ class GraphBuilderTest {
 
     @Test
     fun buildGraph_emptyWays_isEmpty() {
-        val graph = GraphBuilder.buildGraph(emptyList(), centerLat, centerLon, requestedRadiusMeters = 450.0)
+        val graph = GraphBuilder.buildGraph(emptyList())
         assertTrue(graph.isEmpty)
     }
 
     /**
-     * A long way whose vertices are all far outside the clip radius (Overpass matched it because its
-     * line passes near the center) must be kept whole rather than dropped — dropping it is what once
-     * emptied small-radius graphs.
+     * The core fix: two ways that meet at a node in the *middle* of the first way (a T-junction) must
+     * end up connected. The first way must be split at the shared node so a walk can turn onto the
+     * second — otherwise the graph fragments and routes collapse to a few metres on real data.
      */
     @Test
-    fun buildGraph_wayWithNoVertexInRadius_isKept() {
-        // Two endpoints ~5km north and ~5km south of center; neither is within the clip radius.
-        val far = listOf(
-            RawWay(
-                wayId = 1,
-                nodeIds = listOf(100, 101),
-                points = listOf(
-                    GeoPt(centerLat + 0.045, centerLon),
-                    GeoPt(centerLat - 0.045, centerLon)
-                )
-            )
+    fun buildGraph_splitsWayAtSharedIntersectionNode() {
+        val d = 0.001
+        // Way A runs west-east through nodes 1-2-3; node 2 is its middle.
+        val wayA = RawWay(
+            wayId = 1,
+            nodeIds = listOf(1, 2, 3),
+            points = listOf(GeoPt(centerLat, centerLon - d), GeoPt(centerLat, centerLon), GeoPt(centerLat, centerLon + d))
         )
-        val graph = GraphBuilder.buildGraph(far, centerLat, centerLon, requestedRadiusMeters = 450.0)
-        assertFalse("tangent way should be kept, not dropped", graph.isEmpty)
-        assertEquals(2, graph.nodes.size)
+        // Way B joins at node 2 and heads north to node 4.
+        val wayB = RawWay(
+            wayId = 2,
+            nodeIds = listOf(2, 4),
+            points = listOf(GeoPt(centerLat, centerLon), GeoPt(centerLat + d, centerLon))
+        )
+        val graph = GraphBuilder.buildGraph(listOf(wayA, wayB))
+
+        assertTrue("shared middle node must be a graph vertex", graph.nodes.containsKey(2))
+        val edgesAt2 = graph.edgesByNode[2].orEmpty()
+        // Node 2 should connect to nodes 1, 3 (way A split in two) and 4 (way B) — degree 3.
+        val neighbors = edgesAt2.map { com.newroads.app.osm.otherEnd(it, 2) }.toSet()
+        assertEquals("node 2 should join both halves of A and way B", setOf(1L, 3L, 4L), neighbors)
     }
 
     @Test
-    fun buildGraph_clipsWayExtendingBeyondRadius() {
-        // A way that starts at the center and marches far north; only the near portion should survive.
-        val points = (0..50).map { GeoPt(centerLat + it * 0.002, centerLon) } // 0..~11km north
-        val nodeIds = (0..50).map { it.toLong() }
-        val graph = GraphBuilder.buildGraph(
-            listOf(RawWay(1, nodeIds, points)),
-            centerLat, centerLon, requestedRadiusMeters = 450.0
-        )
+    fun buildGraph_loneWayWithoutIntersections_isSingleEdge() {
+        // A way that no other way touches stays one edge between its endpoints.
+        val points = (0..5).map { GeoPt(centerLat + it * 0.001, centerLon) }
+        val nodeIds = (0..5).map { it.toLong() }
+        val graph = GraphBuilder.buildGraph(listOf(RawWay(1, nodeIds, points)))
         assertFalse(graph.isEmpty)
-        // The retained edge must be far shorter than the full ~11km way (clipped to ~radius*buffer).
-        val edge = graph.edgesByNode.values.first().first()
-        assertTrue("edge should be clipped near the radius, got ${edge.lengthMeters}m", edge.lengthMeters < 2000.0)
+        assertEquals("only the two endpoints anchor the edge", 2, graph.nodes.size)
     }
 
     @Test

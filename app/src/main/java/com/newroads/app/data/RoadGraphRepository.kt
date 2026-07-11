@@ -32,12 +32,7 @@ class RoadGraphRepository(
         val cutoff = System.currentTimeMillis() - CACHE_TTL_MILLIS
 
         cacheDao.findFresh(latRounded, lonRounded, radiusBucket, cutoff)?.let { cached ->
-            val cachedGraph = GraphBuilder.build(
-                JSONObject(cached.rawJson),
-                centerLat,
-                centerLon,
-                cached.radiusBucketMeters.toDouble()
-            )
+            val cachedGraph = GraphBuilder.build(JSONObject(cached.rawJson))
             // A cached entry can be an empty graph from an earlier bad/incomplete response.
             // Don't trust it for a full week — fall through to a fresh fetch instead.
             if (!cachedGraph.isEmpty) {
@@ -65,7 +60,7 @@ class RoadGraphRepository(
             )
         }
 
-        return GraphBuilder.build(JSONObject(rawJson), centerLat, centerLon, radiusBucket.toDouble())
+        return GraphBuilder.build(JSONObject(rawJson))
     }
 
     // ~111m per 0.001 degree of latitude; close enough to bucket "the same spot" for caching.
