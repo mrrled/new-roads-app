@@ -14,6 +14,8 @@ import com.newroads.app.location.WalkSession
 import com.newroads.app.location.getLastLocation
 import com.newroads.app.osm.GeoPt
 import com.newroads.app.osm.OverpassException
+import com.newroads.app.routing.ExplorationCalculator
+import com.newroads.app.routing.ExplorationData
 import com.newroads.app.routing.RouteGenerator
 import com.newroads.app.routing.RouteResult
 import kotlinx.coroutines.Dispatchers
@@ -51,6 +53,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val visitedSegments: StateFlow<List<VisitedSegmentEntity>> = _visitedSegments.asStateFlow()
 
     val trackingState: StateFlow<TrackingState> = TrackingRepository.state
+
+    data class ExplorationUi(
+        val isLoading: Boolean = false,
+        val error: String? = null,
+        val center: GeoPt? = null,
+        val data: ExplorationData? = null
+    )
+
+    private val _exploration = MutableStateFlow(ExplorationUi())
+    val exploration: StateFlow<ExplorationUi> = _exploration.asStateFlow()
 
     private val _startPoint = MutableStateFlow<GeoPt?>(null)
     val startPoint: StateFlow<GeoPt?> = _startPoint.asStateFlow()
@@ -128,6 +140,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Computes the "explored streets" stats and fog-of-war edges around the start point
+     * (or current location) within [EXPLORATION_RADIUS_METERS].
+     */
+    fun loadExploration() {
+        viewModelScope.launch {
+            _exploration.value = ExplorationUi(isLoading = true)
+            try {
+                val origin = _startPoint.value ?: getLastLocation(getApplication())?.let {
+                    GeoPt(it.latitude, it.longitude)
+                }
+                if (origin == null) {
+                    _exploration.value = ExplorationUi(error = "Не удалось определить местоположение")
+                    return@launch
+                }
+                val graph = withContext(Dispatchers.IO) {
+                    graphRepository.getGraph(origin.lat, origin.lon, EXPLORATION_RADIUS_METERS) { }
+                }
+                val visitedKeys = withContext(Dispatchers.IO) { repository.getVisitedKeys() }
+                val data = withContext(Dispatchers.Default) {
+                    ExplorationCalculator.compute(graph, visitedKeys)
+                }
+                _exploration.value = ExplorationUi(center = origin, data = data)
+            } catch (e: OverpassException) {
+                _exploration.value = ExplorationUi(error = e.message)
+            } catch (e: Exception) {
+                _exploration.value = ExplorationUi(error = "Ошибка: ${e.message}")
+            }
+        }
+    }
+
     fun loadHistory() {
         viewModelScope.launch {
             _history.value = repository.getAllWalkRecords()
@@ -167,5 +210,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
         const val STRIDE_METERS = 0.75
+
+        // Keep the exploration area modest: the stat reads naturally as "streets around you", and
+        // the Overpass response for ~1km over a dense city stays small enough for the local cache.
+        const val EXPLORATION_RADIUS_METERS = 1000.0
     }
 }

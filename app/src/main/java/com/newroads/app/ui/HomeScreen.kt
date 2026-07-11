@@ -35,7 +35,8 @@ fun HomeScreen(
     viewModel: MainViewModel,
     onRouteReady: () -> Unit,
     onOpenHistory: () -> Unit,
-    onPickLocation: () -> Unit
+    onPickLocation: () -> Unit,
+    onOpenExploration: () -> Unit
 ) {
     val targetSteps by viewModel.targetSteps.collectAsState()
     val route by viewModel.route.collectAsState()
@@ -138,6 +139,9 @@ fun HomeScreen(
             Spacer(Modifier.height(24.dp))
             TextButton(onClick = onOpenHistory) {
                 Text("История прогулок")
+            }
+            TextButton(onClick = onOpenExploration) {
+                Text("Карта исследования")
             }
         }
     }

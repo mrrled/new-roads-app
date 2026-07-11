@@ -12,6 +12,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.newroads.app.ui.ExplorationScreen
 import com.newroads.app.ui.HistoryScreen
 import com.newroads.app.ui.HomeScreen
 import com.newroads.app.ui.MainViewModel
@@ -48,7 +49,14 @@ class MainActivity : ComponentActivity() {
                             viewModel = viewModel,
                             onRouteReady = { navController.navigate("map") },
                             onOpenHistory = { navController.navigate("history") },
-                            onPickLocation = { navController.navigate("pick_location") }
+                            onPickLocation = { navController.navigate("pick_location") },
+                            onOpenExploration = { navController.navigate("exploration") }
+                        )
+                    }
+                    composable("exploration") {
+                        ExplorationScreen(
+                            viewModel = viewModel,
+                            onBack = { navController.popBackStack() }
                         )
                     }
                     composable("map") {
