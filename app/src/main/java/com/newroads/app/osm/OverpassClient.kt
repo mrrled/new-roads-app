@@ -7,10 +7,12 @@ import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.FormBody
@@ -53,11 +55,23 @@ class OverpassClient {
         return raceEndpoints(body)
     }
 
-    /** Queries every endpoint at once and returns the first one that yields a valid response. */
+    /**
+     * "Hedged" requests: the primary endpoint is queried first; a backup is only added if no result
+     * has arrived within [HEDGE_DELAY_MS] (or as soon as the current requests all fail). This keeps
+     * a healthy primary on the user's full bandwidth — important because the road graph can be many
+     * megabytes, and firing every mirror at once would make them fight over one connection and all
+     * time out — while still failing over quickly when the primary is slow or down.
+     */
     private suspend fun raceEndpoints(body: FormBody): String = coroutineScope {
         val results = Channel<Result<String>>(Channel.UNLIMITED)
-        val jobs = ENDPOINTS.map { endpoint ->
-            launch {
+        val jobs = ArrayList<Job>()
+        var launched = 0
+
+        fun launchNext() {
+            if (launched >= ENDPOINTS.size) return
+            val endpoint = ENDPOINTS[launched]
+            launched++
+            jobs += launch {
                 val outcome = runCatching {
                     val json = requestJson(endpoint, body)
                     validate(json)
@@ -71,23 +85,35 @@ class OverpassClient {
         }
 
         try {
+            launchNext()
             var lastError: Throwable? = null
             var emptyResponse: String? = null
             var received = 0
             while (received < ENDPOINTS.size) {
-                val result = results.receive()
+                val moreToLaunch = launched < ENDPOINTS.size
+                // Wait for a result, but if none arrives within the hedge delay, add a backup.
+                val result = if (moreToLaunch) {
+                    withTimeoutOrNull(HEDGE_DELAY_MS) { results.receive() }
+                } else {
+                    results.receive()
+                }
+                if (result == null) {
+                    launchNext()
+                    continue
+                }
                 received++
                 val json = result.getOrNull()
                 if (json != null) {
-                    // A response with actual roads wins the race outright. An empty-but-valid
-                    // response (e.g. from a mirror that only holds a regional extract and thus
-                    // returns nothing for this area) must NOT beat a slower full response, so it's
-                    // only used as a last resort if every endpoint comes back empty.
+                    // A response with actual roads wins outright. An empty-but-valid response (e.g.
+                    // from a mirror holding only a regional extract) must NOT beat a slower full
+                    // response, so it's only used as a last resort if every endpoint comes back empty.
                     if (hasRoads(json)) return@coroutineScope json
                     emptyResponse = json
                 } else {
                     lastError = result.exceptionOrNull()
                 }
+                // All in-flight requests have reported; don't wait out the hedge delay to try more.
+                if (received >= launched) launchNext()
             }
             // Every endpoint answered but none had roads: fall back to an empty response (the
             // caller reports "no roads here") rather than a network error, if we got one at all.
@@ -105,7 +131,7 @@ class OverpassClient {
     }
 
     /** Cheap check for whether a validated response actually contains any ways (skel geom ways carry "nodes"). */
-    private fun hasRoads(json: String): Boolean = json.contains("\"nodes\"")
+    internal fun hasRoads(json: String): Boolean = json.contains("\"nodes\"")
 
     /** Performs one Overpass request, cancelling the underlying HTTP call if the coroutine is cancelled. */
     private suspend fun requestJson(endpoint: String, body: FormBody): String =
@@ -177,8 +203,9 @@ class OverpassClient {
     }
 
     companion object {
-        private const val QUERY_TIMEOUT_SECONDS = 20L
-        private const val PER_ATTEMPT_TIMEOUT_SECONDS = 25L
+        private const val QUERY_TIMEOUT_SECONDS = 25L
+        private const val PER_ATTEMPT_TIMEOUT_SECONDS = 35L
+        private const val HEDGE_DELAY_MS = 3000L
 
         // Only global (whole-planet) instances. A regional mirror (e.g. overpass.openstreetmap.ru,
         // which mainly holds Russia/CIS data) would return an empty result for other areas, which

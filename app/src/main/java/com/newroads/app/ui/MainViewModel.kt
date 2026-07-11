@@ -78,7 +78,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     GeoPt(location.latitude, location.longitude)
                 }
                 val targetDistance = _targetSteps.value * STRIDE_METERS
-                val radius = targetDistance / 2.0 * 1.2
+                // A loop only needs roads within roughly half its length of the start, and because
+                // the walk meanders rather than going straight, a good bit less. Keeping the radius
+                // tight matters a lot: the Overpass response for a big radius over a dense city can
+                // be 10+ MB, which is slow to fetch and can't be cached. 0.8 leaves ample margin.
+                val radius = targetDistance / 2.0 * 0.8
 
                 val graph = withContext(Dispatchers.IO) {
                     graphRepository.getGraph(origin.lat, origin.lon, radius) {
