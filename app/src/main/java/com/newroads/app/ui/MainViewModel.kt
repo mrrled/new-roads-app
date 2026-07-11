@@ -13,6 +13,9 @@ import com.newroads.app.location.TrackingState
 import com.newroads.app.location.getLastLocation
 import com.newroads.app.osm.GeoPt
 import com.newroads.app.osm.OverpassException
+import com.newroads.app.osm.RoadGraph
+import com.newroads.app.osm.segmentKey
+import com.newroads.app.routing.MapMatcher
 import com.newroads.app.routing.RouteGenerator
 import com.newroads.app.routing.RouteResult
 import kotlinx.coroutines.Dispatchers
@@ -53,6 +56,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _startPoint = MutableStateFlow<GeoPt?>(null)
     val startPoint: StateFlow<GeoPt?> = _startPoint.asStateFlow()
+
+    /** Road graph from the latest route generation; used to map-match the recorded walk. */
+    private var lastGraph: RoadGraph? = null
 
     fun setTargetSteps(steps: Int) {
         _targetSteps.value = steps.coerceIn(1000, 40000)
@@ -98,6 +104,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
 
+                lastGraph = graph
+
                 _statusMessage.value = "Читаем историю пройденных дорог..."
                 val visitedKeys = withContext(Dispatchers.IO) { repository.getVisitedKeys() }
 
@@ -135,9 +143,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val tracked = TrackingRepository.stopAndReset()
             if (tracked.points.size < 2) return@launch
 
-            val plannedRoute = _route.value
-            if (plannedRoute != null) {
-                repository.markRouteVisited(plannedRoute)
+            // Honest visited-roads accounting: map-match the GPS track against the road graph and
+            // credit only the segments the user actually walked along — not the planned route.
+            val newRoadFraction = withContext(Dispatchers.Default) {
+                val graph = lastGraph ?: return@withContext 0.0
+                val walkedEdges = MapMatcher.matchWalkedEdges(tracked.points, graph)
+                if (walkedEdges.isEmpty()) return@withContext 0.0
+
+                val previouslyVisited = repository.getVisitedKeys()
+                val newCount = walkedEdges.count {
+                    segmentKey(it.wayId, it.fromNode, it.toNode) !in previouslyVisited
+                }
+                repository.markEdgesVisited(walkedEdges)
+                newCount.toDouble() / walkedEdges.size
             }
 
             val record = WalkRecordEntity(
@@ -146,7 +164,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 distanceMeters = tracked.distanceMeters,
                 steps = (tracked.distanceMeters / STRIDE_METERS).toInt(),
                 pathJson = RoadHistoryRepository.encodePoints(tracked.points),
-                newRoadFraction = plannedRoute?.newRoadFraction ?: 0.0
+                newRoadFraction = newRoadFraction
             )
             repository.saveWalkRecord(record)
             _route.value = null

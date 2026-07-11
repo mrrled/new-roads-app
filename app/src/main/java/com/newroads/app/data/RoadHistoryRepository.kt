@@ -4,7 +4,7 @@ import com.newroads.app.data.db.AppDatabase
 import com.newroads.app.data.db.entity.VisitedSegmentEntity
 import com.newroads.app.data.db.entity.WalkRecordEntity
 import com.newroads.app.osm.GeoPt
-import com.newroads.app.routing.RouteResult
+import com.newroads.app.osm.GraphEdge
 
 /**
  * Bridges the OSM road graph (in-memory) with the locally persisted
@@ -18,9 +18,10 @@ class RoadHistoryRepository(private val db: AppDatabase) {
     suspend fun getAllVisitedSegments(): List<VisitedSegmentEntity> =
         db.visitedSegmentDao().getAll()
 
-    suspend fun markRouteVisited(route: RouteResult) {
+    /** Marks the given road segments as walked (used with the map-matched edges of a GPS track). */
+    suspend fun markEdgesVisited(edges: List<GraphEdge>) {
         val now = System.currentTimeMillis()
-        for (edge in route.edges) {
+        for (edge in edges) {
             val from = minOf(edge.fromNode, edge.toNode)
             val to = maxOf(edge.fromNode, edge.toNode)
             val existing = db.visitedSegmentDao().find(edge.wayId, from, to)
